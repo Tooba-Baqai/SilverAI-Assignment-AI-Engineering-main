@@ -18,6 +18,7 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
+        self.rag = None
         self._initialized = False
         
         # Use session state to cache the heavy model so it's only loaded ONCE
@@ -29,7 +30,8 @@ class KnowledgeBase:
             from handbook_generator import HandbookGenerator
             st.session_state.generator_instance = HandbookGenerator()
 
-        # Define the processing functions using the cached model
+    def _create_rag_instance(self):
+        """Creates the LightRAG instance. Must be called within a stable context."""
         def llm_func(prompt, **kwargs):
             # Internal RAG operations (extraction, summarizing) are better on 8B for stability
             gen = st.session_state.generator_instance
@@ -48,20 +50,19 @@ class KnowledgeBase:
         )
 
         # Initialize LightRAG
-        try:
-            self.rag = LightRAG(
-                working_dir=working_dir,
-                llm_model_func=llm_func,
-                embedding_func=wrapped_emb
-            )
-        except Exception as e:
-            st.error(f"Critical System Error: {e}")
+        return LightRAG(
+            working_dir=self.working_dir,
+            llm_model_func=llm_func,
+            embedding_func=wrapped_emb
+        )
 
     async def _ensure_initialized(self):
-        """Ensures that LightRAG storages are initialized before any operation."""
+        """Ensures that LightRAG is created and initialized on the CURRENT loop."""
+        if self.rag is None:
+            self.rag = self._create_rag_instance()
+
         if not self._initialized:
             try:
-                # Some versions use ainitialize_storages, some use initialize_storages
                 if hasattr(self.rag, "ainitialize_storages"):
                     await self.rag.ainitialize_storages()
                 elif hasattr(self.rag, "initialize_storages"):
@@ -82,7 +83,16 @@ class KnowledgeBase:
     async def ainsert_text(self, text):
         """Async version of text insertion."""
         await self._ensure_initialized()
-        return await self.rag.ainsert(text)
+        try:
+            return await self.rag.ainsert(text)
+        except Exception as e:
+            if "different event loop" in str(e).lower():
+                # Loop mismatch: Re-create on the new loop
+                self.rag = self._create_rag_instance()
+                self._initialized = False # Force storage re-init on this loop
+                await self._ensure_initialized()
+                return await self.rag.ainsert(text)
+            raise e
 
     def insert_text(self, text):
         """Sync wrapper for text insertion."""
@@ -97,7 +107,16 @@ class KnowledgeBase:
     async def aquery(self, query, mode="hybrid"):
         """Async version of querying."""
         await self._ensure_initialized()
-        return await self.rag.aquery(query, QueryParam(mode=mode))
+        try:
+            return await self.rag.aquery(query, QueryParam(mode=mode))
+        except Exception as e:
+            if "different event loop" in str(e).lower():
+                # Loop mismatch: Re-create on the new loop
+                self.rag = self._create_rag_instance()
+                self._initialized = False
+                await self._ensure_initialized()
+                return await self.rag.aquery(query, QueryParam(mode=mode))
+            raise e
 
     def query(self, query, mode="hybrid"):
         """Sync wrapper for querying."""
