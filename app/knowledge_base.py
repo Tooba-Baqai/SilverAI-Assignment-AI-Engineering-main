@@ -18,11 +18,7 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
-        self.rag = None
-        self._loop = None
-        self._initialized = False
-        
-        # Use session state to cache the heavy model so it's only loaded ONCE
+        # Cache heavy models in session to make re-instantiation fast
         if "emb_model" not in st.session_state:
             from sentence_transformers import SentenceTransformer
             st.session_state.emb_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -31,8 +27,8 @@ class KnowledgeBase:
             from handbook_generator import HandbookGenerator
             st.session_state.generator_instance = HandbookGenerator()
 
-    def _create_rag_instance(self):
-        """Creates the LightRAG instance. Must be called within a stable context."""
+    async def _get_active_rag(self):
+        """Creates and returns a fresh RAG instance bound to the CURRENT loop."""
         def llm_func(prompt, **kwargs):
             gen = st.session_state.generator_instance
             return gen._get_completion(prompt, current_model_override=gen.fallback_model)
@@ -48,39 +44,20 @@ class KnowledgeBase:
             max_token_size=8192
         )
 
-        return LightRAG(
+        # Create fresh instance for this operation ONLY
+        rag = LightRAG(
             working_dir=self.working_dir,
             llm_model_func=llm_func,
             embedding_func=wrapped_emb
         )
 
-    async def _ensure_initialized(self):
-        """Ensures that LightRAG is created and initialized on the CURRENT loop."""
-        try:
-            current_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            current_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(current_loop)
-
-        # CRITICAL: Recreate RAG if loop changed to avoid asyncio Lock errors
-        if self.rag is None or self._loop != current_loop:
-            self.rag = self._create_rag_instance()
-            self._loop = current_loop
-            self._initialized = False 
-
-        if not self._initialized:
-            try:
-                # Based on the latest LightRAG requirements:
-                # We prioritize initialize_storages() as it sets up DocStatusStorage
-                if hasattr(self.rag, "initialize_storages"):
-                    await self.rag.initialize_storages()
-                elif hasattr(self.rag, "ainitialize_storages"):
-                    await self.rag.ainitialize_storages()
-                
-                self._initialized = True
-            except Exception as e:
-                st.error(f"Storage Initialization Failed: {e}")
-                raise e
+        # Initialize its storages on the current loop
+        if hasattr(rag, "initialize_storages"):
+            await rag.initialize_storages()
+        elif hasattr(rag, "ainitialize_storages"):
+            await rag.ainitialize_storages()
+            
+        return rag
 
     def _get_loop(self):
         """Helper to safely get or create an event loop for sync wrappers."""
@@ -94,8 +71,8 @@ class KnowledgeBase:
     async def ainsert_text(self, text):
         """Async version of text insertion."""
         if not text: return
-        await self._ensure_initialized()
-        return await self.rag.ainsert(text)
+        rag = await self._get_active_rag()
+        return await rag.ainsert(text)
 
     def insert_text(self, text):
         """Sync wrapper for text insertion."""
@@ -110,8 +87,8 @@ class KnowledgeBase:
 
     async def aquery(self, query, mode="hybrid"):
         """Async version of querying."""
-        await self._ensure_initialized()
-        return await self.rag.aquery(query, QueryParam(mode=mode))
+        rag = await self._get_active_rag()
+        return await rag.aquery(query, QueryParam(mode=mode))
 
     def query(self, query, mode="hybrid"):
         """Sync wrapper for querying."""
