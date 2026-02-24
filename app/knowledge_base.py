@@ -62,22 +62,25 @@ class KnowledgeBase:
             current_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(current_loop)
 
-        # CRITICAL: If the loop has changed, we MUST recreate the RAG instance
-        # because its internal locks are bound to the loop it was created on.
+        # CRITICAL: Recreate RAG if loop changed to avoid asyncio Lock errors
         if self.rag is None or self._loop != current_loop:
             self.rag = self._create_rag_instance()
             self._loop = current_loop
-            self._initialized = False # Force storage re-init on this new loop/instance
+            self._initialized = False 
 
         if not self._initialized:
             try:
-                if hasattr(self.rag, "ainitialize_storages"):
-                    await self.rag.ainitialize_storages()
-                elif hasattr(self.rag, "initialize_storages"):
+                # Based on the latest LightRAG requirements:
+                # We prioritize initialize_storages() as it sets up DocStatusStorage
+                if hasattr(self.rag, "initialize_storages"):
                     await self.rag.initialize_storages()
+                elif hasattr(self.rag, "ainitialize_storages"):
+                    await self.rag.ainitialize_storages()
+                
                 self._initialized = True
             except Exception as e:
-                print(f"Initialization warning: {e}")
+                st.error(f"Storage Initialization Failed: {e}")
+                raise e
 
     def _get_loop(self):
         """Helper to safely get or create an event loop for sync wrappers."""
@@ -90,17 +93,20 @@ class KnowledgeBase:
 
     async def ainsert_text(self, text):
         """Async version of text insertion."""
+        if not text: return
         await self._ensure_initialized()
         return await self.rag.ainsert(text)
 
     def insert_text(self, text):
         """Sync wrapper for text insertion."""
+        if not text: return False
         try:
             loop = self._get_loop()
-            return loop.run_until_complete(self.ainsert_text(text))
+            result = loop.run_until_complete(self.ainsert_text(text))
+            return result is not None
         except Exception as e:
             st.error(f"Error indexing text: {e}")
-            return None
+            return False
 
     async def aquery(self, query, mode="hybrid"):
         """Async version of querying."""
@@ -113,7 +119,8 @@ class KnowledgeBase:
             loop = self._get_loop()
             return loop.run_until_complete(self.aquery(query, mode=mode))
         except Exception as e:
-            return f"Error querying: {e}"
+            st.error(f"Query Error: {e}")
+            return f"I encountered an error querying the knowledge base."
 
 def get_kb():
     """Singleton getter for KnowledgeBase to prevent session issues."""
