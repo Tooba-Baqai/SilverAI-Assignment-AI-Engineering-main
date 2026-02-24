@@ -18,7 +18,7 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
-        # Cache heavy models in session to keep 'Isolated Factory' fast
+        # Cache models and instances in session state for cross-script persistence
         if "emb_model" not in st.session_state:
             from sentence_transformers import SentenceTransformer
             st.session_state.emb_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -27,8 +27,12 @@ class KnowledgeBase:
             from handbook_generator import HandbookGenerator
             st.session_state.generator_instance = HandbookGenerator()
             
-    def _create_isolated_rag(self):
-        """Standard RAG constructor used inside the isolated loop."""
+        if "rag_instance" not in st.session_state:
+            st.session_state.rag_instance = None
+            st.session_state.rag_loop = None
+
+    def _create_rag_core(self):
+        """Creates the internal LightRAG object."""
         def llm_func(prompt, **kwargs):
             return st.session_state.generator_instance._get_completion(
                 prompt, current_model_override=st.session_state.generator_instance.fallback_model
@@ -51,57 +55,73 @@ class KnowledgeBase:
             embedding_func=wrapped_emb
         )
 
+    async def _ensure_rag(self):
+        """Ensures the RAG instance is alive and on the CORRECT event loop."""
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(current_loop)
+
+        # Check if we need to (re)create the RAG instance
+        if st.session_state.rag_instance is None or st.session_state.rag_loop != current_loop:
+            st.session_state.rag_instance = self._create_rag_core()
+            st.session_state.rag_loop = current_loop
+            
+            # Re-initialize storage on this new instance/loop
+            if hasattr(st.session_state.rag_instance, "initialize_storages"):
+                await st.session_state.rag_instance.initialize_storages()
+            elif hasattr(st.session_state.rag_instance, "ainitialize_storages"):
+                await st.session_state.rag_instance.ainitialize_storages()
+        
+        return st.session_state.rag_instance
+
     def insert_text(self, text):
-        """Isolated Loop Factory for insertion."""
+        """Sync wrapper with loop safety."""
         if not text: return False
         
-        async def _run():
-            rag = self._create_isolated_rag()
-            if hasattr(rag, "initialize_storages"):
-                await rag.initialize_storages()
-            elif hasattr(rag, "ainitialize_storages"):
-                await rag.ainitialize_storages()
+        async def _internal():
+            rag = await self._ensure_rag()
             await rag.ainsert(text)
             return True
 
         try:
-            # Create a completely fresh loop for this specific task
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            return new_loop.run_until_complete(_run())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_internal())
         except Exception as e:
-            st.error(f"Indexing Error: {e}")
+            st.error(f"Sync Indexing Error: {e}")
             return False
 
     def query(self, query, mode="hybrid"):
-        """Isolated Loop Factory for querying."""
+        """Adaptive Query with Fallback Search."""
         
-        async def _run():
-            rag = self._create_isolated_rag()
-            if hasattr(rag, "initialize_storages"):
-                await rag.initialize_storages()
-            elif hasattr(rag, "ainitialize_storages"):
-                await rag.ainitialize_storages()
+        async def _internal():
+            rag = await self._ensure_rag()
             
-            response = await rag.aquery(query, QueryParam(mode=mode))
-            return response if response else "I couldn't find an answer in the document."
+            # Try primary search mode (hybrid is best for 20k word manuals)
+            res = await rag.aquery(query, QueryParam(mode=mode))
+            
+            # Fallback logic: If empty, walk down the modes
+            if not res or len(str(res).strip()) < 10:
+                res = await rag.aquery(query, QueryParam(mode="local"))
+            
+            if not res or len(str(res).strip()) < 10:
+                res = await rag.aquery(query, QueryParam(mode="naive"))
+                
+            return res if res else "I checked the document but couldn't find specifics for that question."
 
         try:
-            # Create a completely fresh loop for this specific task
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            result = new_loop.run_until_complete(_run())
-            return result
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_internal())
         except Exception as e:
-            st.error(f"Query Error: {e}")
-            return "I encountered a technical error while searching the document."
+            st.error(f"Sync Query Error: {e}")
+            return "The AI engine encountered an error. Please try clicking 'Index Documents' again."
 
     async def aquery(self, query, mode="hybrid"):
-        """Async compatibility for the generator engine."""
-        # Use simple aquery for the generator which handles its own loops
-        rag = self._create_isolated_rag()
-        if hasattr(rag, "initialize_storages"):
-            await rag.initialize_storages()
+        """Direct async query for high-performance generation."""
+        rag = await self._ensure_rag()
         return await rag.aquery(query, QueryParam(mode=mode))
 
 def get_kb():
