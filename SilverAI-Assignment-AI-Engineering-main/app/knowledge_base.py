@@ -3,6 +3,7 @@ import asyncio
 import streamlit as st
 import numpy as np
 from lightrag import LightRAG, QueryParam
+from lightrag.utils import EmbeddingFunc
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,48 +16,47 @@ class KnowledgeBase:
         
         # Pull connection string from Streamlit Secrets or Environment
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
-        
-        # Force cache size to 0 for Supabase Pooler compatibility
         os.environ["POSTGRES_STATEMENT_CACHE_SIZE"] = "0"
         
-        # Define the core functions to reuse
-        llm_func = self._llm_complete
-        emb_func = self._embedding_func
+        # Create the wrapped functions exactly how LightRAG expects them
+        embedding_function = EmbeddingFunc(
+            embedding_dim=384, # Constant for all-MiniLM-L6-v2
+            max_token_size=512,
+            func=self._embedding_func
+        )
 
-        # Initialize LightRAG
         try:
             if pg_conn:
                 self.rag = LightRAG(
                     working_dir=working_dir,
-                    llm_model_func=llm_func,
-                    embedding_func=emb_func,
+                    llm_model_func=self._llm_complete,
+                    embedding_func=embedding_function,
                     kv_storage="PGKVStorage",
                     doc_status_storage="PGDocStatusStorage",
                     graph_storage="PGGraphStorage",
                     vector_storage="PGVectorStorage",
                     addon_conf={"postgres_conn_config": pg_conn}
                 )
-                print("DEBUG: Knowledge Base initialized with PostgreSQL.")
             else:
-                raise ValueError("No database connection string found.")
+                self.rag = LightRAG(
+                    working_dir=working_dir,
+                    llm_model_func=self._llm_complete,
+                    embedding_func=embedding_function
+                )
         except Exception as e:
-            print(f"WARNING: Database connection failed, falling back to local: {e}")
-            # IMPORTANT: Re-pass the functions to the local fallback!
+            # Final fallback
             self.rag = LightRAG(
                 working_dir=working_dir,
-                llm_model_func=llm_func,
-                embedding_func=emb_func
+                llm_model_func=self._llm_complete,
+                embedding_func=embedding_function
             )
 
     def _llm_complete(self, prompt, **kwargs):
         from handbook_generator import HandbookGenerator
-        # Note: We don't pass arguments here to let it use st.secrets inside __init__
-        gen = HandbookGenerator()
-        return gen._get_completion(prompt)
+        return HandbookGenerator()._get_completion(prompt)
 
     async def _embedding_func(self, texts):
         from sentence_transformers import SentenceTransformer
-        # Download usually takes ~30s on first run in cloud
         model = SentenceTransformer('all-MiniLM-L6-v2')
         embeddings = model.encode(texts)
         return embeddings
