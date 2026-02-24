@@ -22,22 +22,23 @@ class KnowledgeBase:
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
         self._initialized = False
         
-        # Move model loading outside to avoid re-loading on every call
-        from sentence_transformers import SentenceTransformer
-        emb_model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Use session state to cache the heavy model so it's only loaded ONCE
+        if "emb_model" not in st.session_state:
+            from sentence_transformers import SentenceTransformer
+            st.session_state.emb_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        if "generator_instance" not in st.session_state:
+            from handbook_generator import HandbookGenerator
+            st.session_state.generator_instance = HandbookGenerator()
 
-        # Define the processing functions
+        # Define the processing functions using the cached model
         def llm_func(prompt, **kwargs):
-            # Use the generator directly to avoid re-initialization overhead
-            if not hasattr(self, "_generator"):
-                from handbook_generator import HandbookGenerator
-                self._generator = HandbookGenerator()
-            return self._generator._get_completion(prompt)
+            return st.session_state.generator_instance._get_completion(prompt)
 
         async def emb_func(texts):
             if isinstance(texts, str):
                 texts = [texts]
-            return emb_model.encode(texts)
+            return st.session_state.emb_model.encode(texts)
 
         # Wrap the embedding function
         wrapped_emb = EmbeddingFunc(
