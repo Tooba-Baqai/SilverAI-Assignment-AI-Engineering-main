@@ -22,17 +22,22 @@ class KnowledgeBase:
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
         self._initialized = False
         
+        # Move model loading outside to avoid re-loading on every call
+        from sentence_transformers import SentenceTransformer
+        emb_model = SentenceTransformer('all-MiniLM-L6-v2')
+
         # Define the processing functions
         def llm_func(prompt, **kwargs):
-            from handbook_generator import HandbookGenerator
-            return HandbookGenerator()._get_completion(prompt)
+            # Use the generator directly to avoid re-initialization overhead
+            if not hasattr(self, "_generator"):
+                from handbook_generator import HandbookGenerator
+                self._generator = HandbookGenerator()
+            return self._generator._get_completion(prompt)
 
         async def emb_func(texts):
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer('all-MiniLM-L6-v2')
             if isinstance(texts, str):
                 texts = [texts]
-            return model.encode(texts)
+            return emb_model.encode(texts)
 
         # Wrap the embedding function
         wrapped_emb = EmbeddingFunc(
@@ -64,7 +69,13 @@ class KnowledgeBase:
             except Exception as e:
                 print(f"Initialization warning: {e}")
 
+    async def ainsert_text(self, text):
+        """Async version of text insertion."""
+        await self._ensure_initialized()
+        return await self.rag.ainsert(text)
+
     def insert_text(self, text):
+        """Sync wrapper for text insertion."""
         try:
             try:
                 loop = asyncio.get_event_loop()
@@ -72,17 +83,18 @@ class KnowledgeBase:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Run initialization and insertion
-            async def run_insertion():
-                await self._ensure_initialized()
-                return await self.rag.ainsert(text)
-                
-            return loop.run_until_complete(run_insertion())
+            return loop.run_until_complete(self.ainsert_text(text))
         except Exception as e:
             st.error(f"Error indexing text: {e}")
             return None
 
+    async def aquery(self, query, mode="hybrid"):
+        """Async version of querying."""
+        await self._ensure_initialized()
+        return await self.rag.aquery(query, QueryParam(mode=mode))
+
     def query(self, query, mode="hybrid"):
+        """Sync wrapper for querying."""
         try:
             try:
                 loop = asyncio.get_event_loop()
@@ -90,10 +102,6 @@ class KnowledgeBase:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            async def run_query():
-                await self._ensure_initialized()
-                return await self.rag.aquery(query, QueryParam(mode=mode))
-                
-            return loop.run_until_complete(run_query())
+            return loop.run_until_complete(self.aquery(query, mode=mode))
         except Exception as e:
             return f"Error querying: {e}"
