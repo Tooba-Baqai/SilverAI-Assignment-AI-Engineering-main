@@ -62,20 +62,29 @@ with st.sidebar:
     
     if st.button("Index Documents"):
         if uploaded_files:
-                total_chars = 0
-                for uploaded_file in uploaded_files:
-                    text = extract_text_from_pdf(uploaded_file)
-                    if not text or len(text.strip()) < 10:
-                        st.error(f"Could not read text from {uploaded_file.name}. Is it scanned or empty?")
-                        continue
-                    st.session_state.kb.insert_text(text)
-                    total_chars += len(text)
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            total_chars = 0
+            
+            for i, uploaded_file in enumerate(uploaded_files):
+                status_text.text(f"Extracting text from {uploaded_file.name}...")
+                text = extract_text_from_pdf(uploaded_file)
                 
-                if total_chars > 0:
-                    st.session_state.indexed = True
-                    st.success(f"Indexing Complete! Successfully processed {total_chars:,} characters. Knowledge Graph is now active.")
-                else:
-                    st.error("Indexing failed: No readable content was found in the uploaded documents.")
+                if not text or len(text.strip()) < 10:
+                    st.error(f"Could not read text from {uploaded_file.name}. Is it scanned or empty?")
+                    continue
+                
+                status_text.text(f"Building Knowledge Graph for {uploaded_file.name}...")
+                st.session_state.kb.insert_text(text)
+                total_chars += len(text)
+                progress_bar.progress((i + 1) / len(uploaded_files))
+            
+            if total_chars > 0:
+                st.session_state.indexed = True
+                status_text.success(f"Indexing Complete! Successfully processed {total_chars:,} characters from {len(uploaded_files)} files.")
+                st.balloons()
+            else:
+                st.error("Indexing failed: No readable content was found in the uploaded documents.")
         else:
             st.warning("Please upload at least one PDF.")
     
