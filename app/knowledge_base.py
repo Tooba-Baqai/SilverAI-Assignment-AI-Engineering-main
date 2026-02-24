@@ -18,7 +18,7 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
-        # Cache models and instances in session state for cross-script persistence
+        # Cache heavy models in session to keep 'Isolated Factory' fast
         if "emb_model" not in st.session_state:
             from sentence_transformers import SentenceTransformer
             st.session_state.emb_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -27,12 +27,8 @@ class KnowledgeBase:
             from handbook_generator import HandbookGenerator
             st.session_state.generator_instance = HandbookGenerator()
             
-        if "rag_instance" not in st.session_state:
-            st.session_state.rag_instance = None
-            st.session_state.rag_loop = None
-
-    def _create_rag_core(self):
-        """Creates the internal LightRAG object."""
+    def _create_fresh_rag(self):
+        """Creates a local, loop-bound RAG instance."""
         def llm_func(prompt, **kwargs):
             return st.session_state.generator_instance._get_completion(
                 prompt, current_model_override=st.session_state.generator_instance.fallback_model
@@ -55,87 +51,71 @@ class KnowledgeBase:
             embedding_func=wrapped_emb
         )
 
-    async def _ensure_rag(self):
-        """Ensures the RAG instance is alive and on the CORRECT event loop."""
-        try:
-            current_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            current_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(current_loop)
-
-        # Check if we need to (re)create the RAG instance
-        if st.session_state.rag_instance is None or st.session_state.rag_loop != current_loop:
-            st.session_state.rag_instance = self._create_rag_core()
-            st.session_state.rag_loop = current_loop
+    def _run_factory(self, func, *args, **kwargs):
+        """The 'Clean Room' Factory: Creates a fresh loop for every task."""
+        async def _internal():
+            rag = self._create_fresh_rag()
+            # Explicitly wait for storage sync before answering
+            if hasattr(rag, "initialize_storages"):
+                await rag.initialize_storages()
+            elif hasattr(rag, "ainitialize_storages"):
+                await rag.ainitialize_storages()
             
-            # Re-initialize storage on this new instance/loop
-            if hasattr(st.session_state.rag_instance, "initialize_storages"):
-                await st.session_state.rag_instance.initialize_storages()
-            elif hasattr(st.session_state.rag_instance, "ainitialize_storages"):
-                await st.session_state.rag_instance.ainitialize_storages()
-        
-        return st.session_state.rag_instance
+            return await func(rag, *args, **kwargs)
+
+        try:
+            # Create a private world (loop) for this operation
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(_internal())
+            finally:
+                new_loop.close()
+        except Exception as e:
+            st.error(f"AI Engine Error: {e}")
+            return None
 
     def insert_text(self, text):
-        """Sync wrapper with loop safety and character count logging."""
-        if not text or len(text.strip()) < 10: 
-            print("Indexing warning: Provided text is too short or empty.")
-            return False
-            
-        async def _internal():
-            rag = await self._ensure_rag()
-            await rag.ainsert(text)
-            print(f"Successfully indexed {len(text)} characters into Knowledge Graph.")
+        """Sync indexing in an isolated loop."""
+        if not text: return False
+        
+        async def _insert(rag, t):
+            await rag.ainsert(t)
             return True
 
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(_internal())
-        except Exception as e:
-            st.error(f"Sync Indexing Error: {e}")
-            return False
+        result = self._run_factory(_insert, text)
+        print(f"Indexing outcome: {'Success' if result else 'Failed'}")
+        return bool(result)
 
     def query(self, query, mode="hybrid"):
-        """Adaptive Query with Fallback Search and failure detection."""
+        """Sync query in an isolated loop with failure fallback."""
         
-        async def _internal():
-            rag = await self._ensure_rag()
-            
-            def is_failure(text):
-                if not text: return True
-                text_lower = str(text).lower()
-                # LightRAG often returns these phrases when no context is found
-                failures = ["sorry", "i'm not able", "no-context", "don't have enough information", "i couldn't find"]
-                if len(text_lower.strip()) < 20: return True
-                return any(f in text_lower for f in failures)
+        async def _query(rag, q, m):
+            def is_bad(t):
+                if not t: return True
+                low = str(t).lower()
+                failures = ["sorry", "i'm not able", "no-context", "i couldn't find", "not able to provide"]
+                return len(str(t).strip()) < 15 or any(f in low for f in failures)
 
-            # Try primary search mode
-            res = await rag.aquery(query, QueryParam(mode=mode))
+            # Try primary mode
+            res = await rag.aquery(q, QueryParam(mode=m))
             
-            # Fallback logic: If failure detected, try other modes
-            if is_failure(res):
-                res = await rag.aquery(query, QueryParam(mode="local"))
-            
-            if is_failure(res):
-                res = await rag.aquery(query, QueryParam(mode="naive"))
+            # Fallback cascade to ensure we never get "None"
+            if is_bad(res):
+                res = await rag.aquery(q, QueryParam(mode="local"))
+            if is_bad(res):
+                res = await rag.aquery(q, QueryParam(mode="naive"))
                 
-            if is_failure(res):
-                return "I've scanned the documents but couldn't find a direct answer. Please ensure the documents were indexed correctly or try re-phrasing your question."
-                
-            return res
+            return res if not is_bad(res) else "I scanned the documents but couldn't find a direct answer. Please ensure the files were indexed correctly."
 
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(_internal())
-        except Exception as e:
-            st.error(f"Sync Query Error: {e}")
-            return "The AI engine encountered an error. Please try clicking 'Index Documents' again."
+        return self._run_factory(_query, query, mode)
 
     async def aquery(self, query, mode="hybrid"):
-        """Direct async query for high-performance generation."""
-        rag = await self._ensure_rag()
+        """Async version for the generator engine."""
+        # Generator uses its own loop management, so we just provide the instance
+        rag = self._create_fresh_rag()
+        if hasattr(rag, "initialize_storages"):
+            await rag.initialize_storages()
         return await rag.aquery(query, QueryParam(mode=mode))
 
 def get_kb():
