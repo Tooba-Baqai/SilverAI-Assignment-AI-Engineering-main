@@ -50,16 +50,17 @@ class HandbookGenerator:
                 if "rate_limit_exceeded" in err_msg or "429" in err_msg:
                     if not current_model_override and self.model_name != self.fallback_model:
                         self.model_name = self.fallback_model
-                        continue
-                    wait_time = 60
+                        continue # Fallback immediately without sleep
+                    
+                    wait_time = 30 # Reduced wait time
                     match = re.search(r"try again in ([\d\.]+)s", err_msg)
-                    if match: wait_time = float(match.group(1)) + 2
+                    if match: wait_time = float(match.group(1)) + 1
                     time.sleep(wait_time)
                 elif "decommissioned" in err_msg or "400" in err_msg:
                     if not current_model_override: self.model_name = self.fallback_model
                     continue
                 else:
-                    time.sleep(5)
+                    time.sleep(2)
         return "I encountered a persistent error with the AI provider."
 
     async def _get_completion_async(self, prompt, max_tokens=4096, retry_count=3, current_model_override=None):
@@ -78,16 +79,17 @@ class HandbookGenerator:
                 if "rate_limit_exceeded" in err_msg or "429" in err_msg:
                     if not current_model_override and self.model_name != self.fallback_model:
                         self.model_name = self.fallback_model
-                        continue
-                    wait_time = 60
+                        continue # Fallback immediately without sleep
+                    
+                    wait_time = 30
                     match = re.search(r"try again in ([\d\.]+)s", err_msg)
-                    if match: wait_time = float(match.group(1)) + 2
+                    if match: wait_time = float(match.group(1)) + 1
                     await asyncio.sleep(wait_time)
                 elif "decommissioned" in err_msg or "400" in err_msg:
                     if not current_model_override: self.model_name = self.fallback_model
                     continue
                 else:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
         return "I encountered a persistent error with the AI provider."
 
     def generate_handbook_sync(self, prompt, kb, progress_callback=None):

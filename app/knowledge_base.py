@@ -31,7 +31,9 @@ class KnowledgeBase:
 
         # Define the processing functions using the cached model
         def llm_func(prompt, **kwargs):
-            return st.session_state.generator_instance._get_completion(prompt)
+            # Internal RAG operations (extraction, summarizing) are better on 8B for stability
+            gen = st.session_state.generator_instance
+            return gen._get_completion(prompt, current_model_override=gen.fallback_model)
 
         async def emb_func(texts):
             if isinstance(texts, str):
