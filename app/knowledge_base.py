@@ -27,21 +27,12 @@ class KnowledgeBase:
             model = SentenceTransformer('all-MiniLM-L6-v2')
             return model.encode(texts)
 
-        # The error self.embedding_func.func happens because LightRAG expects a Wrap-like object or a standard class.
-        # Let's define a small helper class to satisfy the .func property requirement.
-        class EmbeddingWrapper:
-            def __init__(self, func):
-                self.func = func
-
-        emp_wrapper = EmbeddingWrapper(emb_func)
-
         try:
             if pg_conn:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=emp_wrapper,
-                    embedding_dim=384,
+                    embedding_func=emb_func, # Pass the function directly as most versions expect
                     kv_storage="PGKVStorage",
                     doc_status_storage="PGDocStatusStorage",
                     graph_storage="PGGraphStorage",
@@ -52,17 +43,32 @@ class KnowledgeBase:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=emp_wrapper,
-                    embedding_dim=384
+                    embedding_func=emb_func
+                )
+        except TypeError:
+            # If positional arguments fail, use explicit keyword arguments
+            # Some versions of LightRAG changed the signature
+            if pg_conn:
+                self.rag = LightRAG(
+                    working_dir=working_dir,
+                    llm_model_func=llm_func,
+                    embedding_func=emb_func,
+                    kv_storage="PGKVStorage",
+                    doc_status_storage="PGDocStatusStorage",
+                    graph_storage="PGGraphStorage",
+                    vector_storage="PGVectorStorage",
+                    addon_conf={"postgres_conn_config": pg_conn}
+                )
+            else:
+                self.rag = LightRAG(
+                    working_dir=working_dir,
+                    llm_model_func=llm_func,
+                    embedding_func=emb_func
                 )
         except Exception as e:
-            print(f"ERROR: {e}")
-            self.rag = LightRAG(
-                working_dir=working_dir,
-                llm_model_func=llm_func,
-                embedding_func=emp_wrapper,
-                embedding_dim=384
-            )
+            st.error(f"Initialization Error: {e}")
+            # Final fallback
+            self.rag = LightRAG(working_dir=working_dir, llm_model_func=llm_func, embedding_func=emb_func)
 
     def insert_text(self, text):
         loop = asyncio.new_event_loop()
