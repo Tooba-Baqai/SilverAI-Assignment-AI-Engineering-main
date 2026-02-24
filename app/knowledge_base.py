@@ -3,19 +3,14 @@ import asyncio
 import streamlit as st
 import numpy as np
 import nest_asyncio
+import re
 from lightrag import LightRAG, QueryParam
+from lightrag.utils import EmbeddingFunc
 from dotenv import load_dotenv
 
 # Set up event loop for Streamlit
 nest_asyncio.apply()
 load_dotenv()
-
-class FuncWrapper:
-    """Wrapper to satisfy LightRAG's requirement for a .func attribute on callables."""
-    def __init__(self, func):
-        self.func = func
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
 
 class KnowledgeBase:
     def __init__(self, working_dir="./lightrag_storage"):
@@ -26,6 +21,19 @@ class KnowledgeBase:
         # Database connection from Secrets
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
         
+        if pg_conn:
+            # Parse connection string to set environment variables required by PG Storage
+            # Format: postgresql://user:password@host:port/dbname
+            regex = r"postgresql://(?P<user>[^:]+):(?P<password>[^@]+)@(?P<host>[^:/]+)(:(?P<port>\d+))?/(?P<db>.+)"
+            match = re.match(regex, pg_conn)
+            if match:
+                os.environ["POSTGRES_USER"] = match.group("user")
+                os.environ["POSTGRES_PASSWORD"] = match.group("password")
+                os.environ["POSTGRES_HOST"] = match.group("host")
+                os.environ["POSTGRES_PORT"] = match.group("port") or "5432"
+                os.environ["POSTGRES_DATABASE"] = match.group("db")
+                os.environ["POSTGRES_DB"] = match.group("db")
+
         # Define the processing functions
         def llm_func(prompt, **kwargs):
             from handbook_generator import HandbookGenerator
@@ -38,35 +46,36 @@ class KnowledgeBase:
                 texts = [texts]
             return model.encode(texts)
 
-        # Wrap functions to avoid AttributeError: .func
-        wrapped_llm = FuncWrapper(llm_func)
-        wrapped_emb = FuncWrapper(emb_func)
+        # Correctly wrap the embedding function using LightRAG's internal dataclass
+        # This prevents the TypeError with dataclasses.replace
+        wrapped_emb = EmbeddingFunc(
+            func=emb_func,
+            embedding_dim=384,
+            max_token_size=8192
+        )
 
         try:
             if pg_conn:
-                # Use Addon parameters for Postgres integration
                 self.rag = LightRAG(
                     working_dir=working_dir,
-                    llm_model_func=wrapped_llm,
+                    llm_model_func=llm_func, # LLM func can usually be direct
                     embedding_func=wrapped_emb,
                     kv_storage="PGKVStorage",
                     doc_status_storage="PGDocStatusStorage",
                     graph_storage="PGGraphStorage",
-                    vector_storage="PGVectorStorage",
-                    addon_params={"postgres_conn_config": pg_conn}
+                    vector_storage="PGVectorStorage"
                 )
             else:
                 self.rag = LightRAG(
                     working_dir=working_dir,
-                    llm_model_func=wrapped_llm,
+                    llm_model_func=llm_func,
                     embedding_func=wrapped_emb
                 )
         except Exception as e:
-            # Fallback to local storage if anything fails
-            st.warning(f"Storage initialization failed, falling back to local: {e}")
+            st.warning(f"Database storage failed, falling back to local: {e}")
             self.rag = LightRAG(
                 working_dir=working_dir,
-                llm_model_func=wrapped_llm,
+                llm_model_func=llm_func,
                 embedding_func=wrapped_emb
             )
 
