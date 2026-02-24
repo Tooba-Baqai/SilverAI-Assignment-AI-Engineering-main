@@ -1,0 +1,12 @@
+.env
+app/.env
+**/ .env
+__pycache__/
+*.pdf
+lightrag_storage/
+temp_*.pdf
+*.log
+.DS_Store
+node_modules/
+.venv/
+venv/

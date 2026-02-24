@@ -1,0 +1,366 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            
+    <style>
+        @page { size: A4; margin: 2.5cm; }
+        body { font-family: "Times New Roman", Serif; font-size: 12pt; line-height: 1.5; color: #000; max-width: 100%; }
+        h1 { font-size: 18pt; text-align: center; text-transform: uppercase; margin-bottom: 1em; }
+        h2 { font-size: 14pt; border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 1.5em; }
+        h3 { font-size: 12pt; font-weight: bold; margin-top: 1em; }
+        p { margin-bottom: 1em; text-align: justify; }
+        ul { margin-bottom: 1em; }
+        li { margin-bottom: 0.5em; }
+        strong { font-weight: bold; }
+        hr { border: 0; border-top: 1px solid #000; margin: 2em 0; }
+    </style>
+    
+        </head>
+        <body>
+            <h1 id="ai-engineering-assignment-handbook-generator">🚀 AI Engineering
+Assignment: Handbook Generator</h1>
+<blockquote>
+<p><strong>CONFIDENTIAL</strong> — LunarTech Intellectual Property</p>
+<p><em>Do not share, redistribute, or publish without
+authorization.</em></p>
+</blockquote>
+<hr />
+<h2 id="submission-guide">📬 Submission Guide</h2>
+<p><strong>Submit your completed work to:</strong></p>
+<p>📧 <strong>tk.lunartech@gmail.com</strong></p>
+<h3 id="what-to-include">What to Include</h3>
+<table>
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 80%" />
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Code</strong></td>
+<td>GitHub repository link or <code>.zip</code> archive</td>
+</tr>
+<tr>
+<td><strong>Setup Guide</strong></td>
+<td>Clear instructions to run your application</td>
+</tr>
+<tr>
+<td><strong>Demo</strong></td>
+<td>Short video walkthrough OR screenshots showing the app working</td>
+</tr>
+<tr>
+<td><strong>Write-up</strong></td>
+<td>Brief summary: what you built, approach taken, any challenges</td>
+</tr>
+</tbody>
+</table>
+<h3 id="submission-checklist">Submission Checklist</h3>
+<ul class="task-list">
+<li><label><input type="checkbox" />Working application (local or
+deployed)</label></li>
+<li><label><input type="checkbox" />Can upload PDF
+documents</label></li>
+<li><label><input type="checkbox" />Can chat and receive contextual
+responses</label></li>
+<li><label><input type="checkbox" />Can generate a 20,000-word handbook
+via chat</label></li>
+<li><label><input type="checkbox" />Demo video or screenshots
+included</label></li>
+</ul>
+<hr />
+<h2 id="executive-summary">Executive Summary</h2>
+<h3 id="what-is-this-assignment">What is This Assignment?</h3>
+<p>You are tasked with building a <strong>simple AI-powered chat
+application</strong> that can generate <strong>20,000-word
+handbooks</strong> from uploaded PDF documents. This is an AI
+engineering exercise designed to evaluate your ability to integrate
+modern AI tools and techniques into a functional application.</p>
+<h3 id="why-this-is-simpler-than-it-looks">Why This is Simpler Than It
+Looks</h3>
+<p>This assignment is <strong>not</strong> about building everything
+from scratch. We are providing you with:</p>
+<ol type="1">
+<li><strong>A complete research paper</strong> explaining the LongWriter
+technique—the method used to generate extremely long-form content that
+exceeds typical LLM output limits</li>
+<li><strong>A full reference implementation</strong> with working code
+that demonstrates the core generation logic</li>
+<li><strong>Clear architectural guidance</strong> on exactly which tools
+to use and how they connect</li>
+<li><strong>Permission to use AI coding assistants</strong>—this is an
+AI engineering task, so using tools like KiloCode, Antigravity, Cursor,
+or Kimi K2.5 is not only allowed but encouraged</li>
+</ol>
+<p>You are essentially <strong>assembling proven components</strong>
+into a working application. The hard research and implementation work
+has already been done.</p>
+<h3 id="the-core-task">The Core Task</h3>
+<p>Build an application where a user can:</p>
+<ol type="1">
+<li><strong>Upload PDF documents</strong> (research papers,
+documentation, any text-based PDFs)</li>
+<li><strong>Chat with the system</strong> to ask questions about the
+uploaded content</li>
+<li><strong>Request a handbook</strong> and receive a 20,000+ word
+structured document generated from the PDF content</li>
+</ol>
+<p>The entire interaction should happen through a simple chat interface.
+No complex UI required.</p>
+<h3 id="technology-stack-overview">Technology Stack Overview</h3>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 29%" />
+<col style="width: 51%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Technology</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Frontend</strong></td>
+<td>Gradio, Streamlit, or any UI</td>
+<td>Simple chat interface</td>
+</tr>
+<tr>
+<td><strong>LLM</strong></td>
+<td>Grok 4.1</td>
+<td>Long-context generation with LongWriter technique</td>
+</tr>
+<tr>
+<td><strong>RAG System</strong></td>
+<td>LightRAG</td>
+<td>Knowledge graph creation from PDFs</td>
+</tr>
+<tr>
+<td><strong>Database</strong></td>
+<td>Supabase</td>
+<td>Vector storage for embeddings</td>
+</tr>
+<tr>
+<td><strong>PDF Processing</strong></td>
+<td>PyPDF, pdfplumber</td>
+<td>Extract text from uploads</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-success-looks-like">What Success Looks Like</h3>
+<p>A successful submission demonstrates:</p>
+<ul>
+<li><strong>PDF → Knowledge</strong>: Upload a PDF and have its content
+indexed</li>
+<li><strong>Chat → Context</strong>: Ask a question and get a response
+that references the PDF content</li>
+<li><strong>Request → Handbook</strong>: Ask for a handbook and receive
+a 20,000+ word document with structure, headings, and content derived
+from the uploaded materials</li>
+</ul>
+<hr />
+<h2 id="ai-tools-why-you-should-use-them">🤖 AI Tools: Why You Should
+Use Them</h2>
+<blockquote>
+<p><strong>We don’t just allow AI coding tools—we expect you to use
+them.</strong></p>
+</blockquote>
+<h3 id="why-we-encourage-ai-assistance">Why We Encourage AI
+Assistance</h3>
+<p>This is an <strong>AI engineering assignment</strong>. The ability to
+effectively leverage AI tools is a core competency we’re evaluating. In
+the real world, AI engineers use AI to:</p>
+<ul>
+<li><strong>Accelerate development</strong> — Write boilerplate, debug
+faster, explore APIs</li>
+<li><strong>Learn new technologies</strong> — Get up to speed on
+LightRAG, Supabase, Grok quickly</li>
+<li><strong>Focus on architecture</strong> — Let AI handle syntax while
+you design the system</li>
+<li><strong>Iterate rapidly</strong> — Prototype ideas without getting
+stuck on implementation details</li>
+</ul>
+<p>If you complete this task entirely by hand, you’re working harder,
+not smarter. That’s not the mindset we’re looking for.</p>
+<h3 id="recommended-tools">Recommended Tools</h3>
+<table>
+<colgroup>
+<col style="width: 24%" />
+<col style="width: 25%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Best For</th>
+<th>Why Use It</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KiloCode</strong></td>
+<td>VS Code users</td>
+<td>Inline completions, context-aware suggestions</td>
+</tr>
+<tr>
+<td><strong>Antigravity</strong></td>
+<td>Complex multi-file tasks</td>
+<td>Agentic coding, understands full project context</td>
+</tr>
+<tr>
+<td><strong>Cursor</strong></td>
+<td>End-to-end development</td>
+<td>AI-first editor with powerful chat + apply</td>
+</tr>
+<tr>
+<td><strong>Kimi K2.5 Thinking</strong></td>
+<td>Tricky logic problems</td>
+<td>Deep reasoning for algorithmic challenges</td>
+</tr>
+<tr>
+<td><strong>Claude / GPT / Grok</strong></td>
+<td>General Q&amp;A</td>
+<td>Debugging, explaining concepts, code review</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-to-use-them-effectively">How to Use Them Effectively</h3>
+<ol type="1">
+<li><strong>Give context</strong> — Share error messages, explain what
+you’re trying to build</li>
+<li><strong>Iterate</strong> — Don’t expect perfect code on first try;
+refine with follow-ups</li>
+<li><strong>Verify</strong> — AI can make mistakes; test everything it
+generates</li>
+<li><strong>Learn</strong> — Understand what the AI produces, don’t just
+copy-paste blindly</li>
+</ol>
+<p><strong>Bottom line</strong>: Use every tool at your disposal. That’s
+what a real AI engineer does.</p>
+<hr />
+<h2 id="the-task-one-sentence">🎯 The Task (One Sentence)</h2>
+<p>Build a chat app where you upload PDFs, ask questions, and generate a
+20,000-word handbook—all through conversation.</p>
+<hr />
+<h2 id="what-youre-building">What You’re Building</h2>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                      YOUR APPLICATION                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   📄 PDF Upload  →  🧠 LightRAG  →  💬 Chat UI  →  📖 Handbook │
+│                       (Supabase)      (Grok 4.1)    (20k words)│
+│                                                             │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<h3 id="core-flow">Core Flow</h3>
+<ol type="1">
+<li><strong>User uploads PDFs</strong> → System extracts and chunks
+text</li>
+<li><strong>Chunks stored in Supabase</strong> → LightRAG creates
+knowledge graph</li>
+<li><strong>User chats with UI</strong> → Context retrieved from
+knowledge graph</li>
+<li><strong>LongWriter generates</strong> → 20,000-word handbook
+output</li>
+</ol>
+<hr />
+<h2 id="what-youre-given">📦 What You’re Given</h2>
+<h3 id="research-paper">1. Research Paper</h3>
+<p><code>Documentation/Unleashing 10000 Word Generation From Long Context.pdf</code></p>
+<p>Read this first. It explains the LongWriter technique for generating
+ultra-long content.</p>
+<h3 id="reference-implementation">2. Reference Implementation</h3>
+<p><code>LongWriter-main/</code> — Complete codebase including:</p>
+<ul>
+<li><code>agentwrite/</code> — Core generation logic</li>
+<li><code>train/</code> — Training scripts (for reference)</li>
+<li><code>trans_web_demo.py</code> — Web UI demo</li>
+</ul>
+<h3 id="required-tools">3. Required Tools</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Grok 4.1</strong></td>
+<td>Long-context LLM for generation</td>
+</tr>
+<tr>
+<td><strong>LightRAG</strong></td>
+<td>Knowledge graph from PDFs</td>
+</tr>
+<tr>
+<td><strong>Supabase</strong></td>
+<td>Vector storage + database</td>
+</tr>
+<tr>
+<td><strong>Any AI IDE</strong></td>
+<td>KiloCode, Antigravity, Kimi K2.5, etc.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="technical-requirements">🛠️ Technical Requirements</h2>
+<h3 id="stack">Stack</h3>
+<pre><code>Frontend:      Any (React, Vue, Streamlit, Gradio)
+Backend:       Python or Node.js
+LLM:           Grok 4.1 (via API)
+RAG:           LightRAG
+Storage:       Supabase (pgvector)</code></pre>
+<h3 id="must-have-features">Must-Have Features</h3>
+<ol type="1">
+<li><strong>PDF Upload</strong> — Accept and parse PDF files</li>
+<li><strong>Knowledge Graph</strong> — Store content in LightRAG</li>
+<li><strong>Chat Interface</strong> — Simple text input/output</li>
+<li><strong>Handbook Generation</strong> — Generate 20,000+ words via
+chat</li>
+</ol>
+<h3 id="optional-features">Optional Features</h3>
+<ul>
+<li>Multiple PDF support</li>
+<li>Progress indicator for long generation</li>
+<li>Export to Markdown/PDF</li>
+<li>Conversation history</li>
+</ul>
+<hr />
+<h2 id="test-case">🧪 Test Case</h2>
+<p><strong>Input</strong>:</p>
+<ul>
+<li>Upload 2-3 AI-related PDFs</li>
+<li>Chat: “Create a handbook on Retrieval-Augmented Generation”</li>
+</ul>
+<p><strong>Expected Output</strong>:</p>
+<ul>
+<li>20,000+ word structured document</li>
+<li>Table of contents</li>
+<li>Sections with proper headings</li>
+<li>Citations from uploaded PDFs</li>
+</ul>
+<hr />
+<h2 id="confidentiality-notice">🔒 Confidentiality Notice</h2>
+<p>This assignment, including all provided materials, is the
+intellectual property of <strong>LunarTech</strong>. By
+participating:</p>
+<ul>
+<li>You agree not to share materials publicly</li>
+<li>You may not publish the solution without permission</li>
+<li>This is for evaluation purposes only</li>
+</ul>
+<hr />
+<p><em>Good luck! This is simpler than it looks. The research is done,
+the code exists—you’re putting pieces together.</em></p>
+
+        </body>
+        </html>
+        
