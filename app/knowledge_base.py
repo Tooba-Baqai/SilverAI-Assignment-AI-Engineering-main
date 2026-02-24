@@ -6,9 +6,16 @@ import nest_asyncio
 from lightrag import LightRAG, QueryParam
 from dotenv import load_dotenv
 
-# Apply nest_asyncio to handle Streamlit's event loop
+# Set up event loop for Streamlit
 nest_asyncio.apply()
 load_dotenv()
+
+class FuncWrapper:
+    """Wrapper to satisfy LightRAG's requirement for a .func attribute on callables."""
+    def __init__(self, func):
+        self.func = func
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
 
 class KnowledgeBase:
     def __init__(self, working_dir="./lightrag_storage"):
@@ -16,58 +23,52 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
-        # Pull connection string from Streamlit Secrets or Environment
+        # Database connection from Secrets
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
-        os.environ["POSTGRES_STATEMENT_CACHE_SIZE"] = "0"
         
-        # Define LLM function
+        # Define the processing functions
         def llm_func(prompt, **kwargs):
             from handbook_generator import HandbookGenerator
             return HandbookGenerator()._get_completion(prompt)
 
-        # Define Embedding function
         async def emb_func(texts):
             from sentence_transformers import SentenceTransformer
-            # Use small, fast model for embedding
             model = SentenceTransformer('all-MiniLM-L6-v2')
             if isinstance(texts, str):
                 texts = [texts]
             return model.encode(texts)
 
-        # LIGHTRAG INITIALIZATION
-        # Using a very defensive approach to handle constructor signature changes
-        init_kwargs = {
-            "working_dir": working_dir,
-            "llm_model_func": llm_func,
-            "embedding_func": emb_func
-        }
-
-        # If Supabase is connected, add storage params
-        if pg_conn:
-            init_kwargs.update({
-                "kv_storage": "PGKVStorage",
-                "doc_status_storage": "PGDocStatusStorage",
-                "graph_storage": "PGGraphStorage",
-                "vector_storage": "PGVectorStorage",
-                "addon_conf": {"postgres_conn_config": pg_conn}
-            })
+        # Wrap functions to avoid AttributeError: .func
+        wrapped_llm = FuncWrapper(llm_func)
+        wrapped_emb = FuncWrapper(emb_func)
 
         try:
-            # Try keyword arguments (Standard)
-            self.rag = LightRAG(**init_kwargs)
-        except TypeError as e:
-            # If standard fails, try falling back to basic setup
-            print(f"DEBUG: LightRAG TypeError falling back: {e}")
-            try:
-                # Basic setup without storage override
+            if pg_conn:
+                # Use Addon parameters for Postgres integration
                 self.rag = LightRAG(
                     working_dir=working_dir,
-                    llm_model_func=llm_func,
-                    embedding_func=emb_func
+                    llm_model_func=wrapped_llm,
+                    embedding_func=wrapped_emb,
+                    kv_storage="PGKVStorage",
+                    doc_status_storage="PGDocStatusStorage",
+                    graph_storage="PGGraphStorage",
+                    vector_storage="PGVectorStorage",
+                    addon_params={"postgres_conn_config": pg_conn}
                 )
-            except Exception as final_e:
-                st.error(f"Critical LightRAG Error: {final_e}")
-                raise final_e
+            else:
+                self.rag = LightRAG(
+                    working_dir=working_dir,
+                    llm_model_func=wrapped_llm,
+                    embedding_func=wrapped_emb
+                )
+        except Exception as e:
+            # Fallback to local storage if anything fails
+            st.warning(f"Storage initialization failed, falling back to local: {e}")
+            self.rag = LightRAG(
+                working_dir=working_dir,
+                llm_model_func=wrapped_llm,
+                embedding_func=wrapped_emb
+            )
 
     def insert_text(self, text):
         try:
@@ -75,7 +76,6 @@ class KnowledgeBase:
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        
         return loop.run_until_complete(self.rag.ainsert(text))
 
     def query(self, query, mode="hybrid"):
@@ -84,5 +84,4 @@ class KnowledgeBase:
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
         return loop.run_until_complete(self.rag.aquery(query, QueryParam(mode=mode)))
