@@ -27,19 +27,21 @@ class KnowledgeBase:
             model = SentenceTransformer('all-MiniLM-L6-v2')
             return model.encode(texts)
 
-        # LIGHTRAG EXPECTS A DICT OR AN OBJECT WITH .func
-        # Let's use the dictionary method which is most stable across versions
-        embedding_dict = {
-            "func": emb_func,
-            "dimension": 384
-        }
+        # The error self.embedding_func.func happens because LightRAG expects a Wrap-like object or a standard class.
+        # Let's define a small helper class to satisfy the .func property requirement.
+        class EmbeddingWrapper:
+            def __init__(self, func):
+                self.func = func
+
+        emp_wrapper = EmbeddingWrapper(emb_func)
 
         try:
             if pg_conn:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=embedding_dict,
+                    embedding_func=emp_wrapper,
+                    embedding_dim=384,
                     kv_storage="PGKVStorage",
                     doc_status_storage="PGDocStatusStorage",
                     graph_storage="PGGraphStorage",
@@ -50,14 +52,16 @@ class KnowledgeBase:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=embedding_dict
+                    embedding_func=emp_wrapper,
+                    embedding_dim=384
                 )
         except Exception as e:
             print(f"ERROR: {e}")
             self.rag = LightRAG(
                 working_dir=working_dir,
                 llm_model_func=llm_func,
-                embedding_func=embedding_dict
+                embedding_func=emp_wrapper,
+                embedding_dim=384
             )
 
     def insert_text(self, text):

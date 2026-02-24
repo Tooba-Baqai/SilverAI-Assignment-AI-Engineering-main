@@ -16,7 +16,33 @@ A powerful AI-driven suite that generates professional, 20,000+ word handbooks a
 - **Vector DB**: Supabase (PostgreSQL) for persistent memory.
 - **Frontend**: Streamlit.
 
-## 🚀 Getting Started
+## 🚀 How to Run the App
+
+### 1. Cloud Deployment (Recommended)
+The easiest way to view the app is via **Streamlit Community Cloud**:
+- **Main File**: `app/main.py`
+- **Python Version**: `3.11`
+- **Secrets**: Ensure `GROK_API_KEY` and `POSTGRES_CONNECTION_STRING` are configured in the dashboard.
+
+### 2. Local Setup
+If you want to run the suite on your own machine:
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Tooba-Baqai/SilverAI-Assignment-AI-Engineering-main.git
+   cd SilverAI-Assignment-AI-Engineering-main
+   ```
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Configure Environment**:
+   Create a `.env` file in the `app/` directory with your API keys (see `.env.example`).
+4. **Launch Application**:
+   ```bash
+   streamlit run app/main.py
+   ```
+
+## 📖 Usage Guide
 
 1. **Upload**: Drag and drop your source PDF files into the sidebar.
 2. **Index**: Click "Index Documents" to build the knowledge graph.
