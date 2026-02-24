@@ -5,7 +5,6 @@ import sys
 try:
     import pkg_resources
 except ImportError:
-    # Fallback if setuptools/pkg_resources is missing
     pass
 
 from pdf_processor import extract_text_from_pdf
@@ -34,11 +33,6 @@ st.markdown("""
         font-weight: 600;
         transition: all 0.3s ease;
     }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
-    }
-    /* Simple branding removal */
     [data-testid="stSidebarNav"]::before {
         content: "Drafting Suite";
         margin-left: 20px;
@@ -49,20 +43,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.title("Handbook Suite")
-    uploaded_files = st.file_uploader("Upload Knowledge Source (PDF)", type="pdf", accept_multiple_files=True)
-    if st.button("Index Documents"):
-        if uploaded_files:
-            with st.spinner("Analyzing Content & Building Graph..."):
-                for uploaded_file in uploaded_files:
-                    text = extract_text_from_pdf(uploaded_file)
-                    st.session_state.kb.insert_text(text)
-                st.success("Documents processed and indexed!")
-        else:
-            st.warning("Please upload at least one PDF.")
-
 # Initialize Session State
 if "kb" not in st.session_state:
     st.session_state.kb = KnowledgeBase()
@@ -70,40 +50,67 @@ if "generator" not in st.session_state:
     st.session_state.generator = HandbookGenerator()
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "indexed" not in st.session_state:
+    st.session_state.indexed = False
 
-# Main Chat Interface
+# Sidebar
+with st.sidebar:
+    st.title("Handbook Suite")
+    uploaded_files = st.file_uploader("Upload Knowledge Source (PDF)", type="pdf", accept_multiple_files=True)
+    
+    if st.button("Index Documents"):
+        if uploaded_files:
+            with st.spinner("Analyzing Content & Building Knowledge Graph... (This creates a deep AI memory, please wait 1-2 minutes)"):
+                for uploaded_file in uploaded_files:
+                    text = extract_text_from_pdf(uploaded_file)
+                    st.session_state.kb.insert_text(text)
+                st.session_state.indexed = True
+                st.success("Indexing Complete! Knowledge Graph is now active.")
+        else:
+            st.warning("Please upload at least one PDF.")
+    
+    if st.session_state.indexed:
+        st.info("✅ System Ready: Knowledge Graph Active")
+    else:
+        st.warning("⚠️ Action Required: Please index your documents to enable Chat/Generation.")
+
+# Main Interface
 st.title("AI Handbook Architect")
-st.write("Generate professional, long-form handbooks (20,000+ words) from your documents.")
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+if not st.session_state.indexed:
+    st.info("### 👋 Welcome! \nTo begin, please **Upload a PDF** and click **'Index Documents'** in the sidebar. \n\n*Why? This app uses 'GraphRAG', which builds a complex web of relationships between ideas in your document. This is what allows for extremely high-quality 20,000-word handbooks, rather than just simple summaries.*")
+else:
+    st.write("Generate professional, long-form handbooks or chat with your document's Knowledge Graph.")
 
-if prompt := st.chat_input("Ask a question or request a handbook generation..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    with st.chat_message("assistant"):
-        with st.spinner("Generating..."):
-            is_handbook_request = any(word in prompt.lower() for word in ["handbook", "guide", "manual", "book"])
-            is_action_request = any(word in prompt.lower() for word in ["give me", "create", "generate", "write", "make", "tell me"])
-            
-            if is_handbook_request and is_action_request:
-                st.write("🚀 **Starting Long-Form Generation Engine...**")
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+    if prompt := st.chat_input("Ask a question or request a handbook generation..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Generating..."):
+                is_handbook_request = any(word in prompt.lower() for word in ["handbook", "guide", "manual", "book"])
+                is_action_request = any(word in prompt.lower() for word in ["give me", "create", "generate", "write", "make", "tell me"])
                 
-                def update_progress(current, total, status):
-                    progress_bar.progress(current / total)
-                    status_text.text(f"Processing Section {current}/{total}: {status}")
+                if is_handbook_request and is_action_request:
+                    st.write("🚀 **Starting Long-Form Generation Engine...**")
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    def update_progress(current, total, status):
+                        progress_bar.progress(current / total)
+                        status_text.text(f"Processing Section {current}/{total}: {status}")
 
-                handbook = st.session_state.generator.generate_handbook_sync(prompt, st.session_state.kb, update_progress)
-                
-                st.markdown(handbook)
-                st.download_button("📥 Download Generated Handbook", handbook, "generated_handbook.md")
-                st.session_state.messages.append({"role": "assistant", "content": "The handbook has been successfully generated. You can download the full version above."})
-            else:
-                response = st.session_state.kb.query(prompt)
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                    handbook = st.session_state.generator.generate_handbook_sync(prompt, st.session_state.kb, update_progress)
+                    
+                    st.markdown(handbook)
+                    st.download_button("📥 Download Generated Handbook", handbook, "generated_handbook.md")
+                    st.session_state.messages.append({"role": "assistant", "content": "The handbook has been successfully generated. You can download the full version above."})
+                else:
+                    response = st.session_state.kb.query(prompt)
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
