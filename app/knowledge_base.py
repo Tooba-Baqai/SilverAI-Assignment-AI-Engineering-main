@@ -20,23 +20,8 @@ class KnowledgeBase:
         
         # Database connection from Secrets
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
+        self._initialized = False
         
-        # Add a flag to track if we successfully connected to the DB
-        self.is_db_connected = False
-        
-        if pg_conn:
-            # Parse connection string to set environment variables required by PG Storage
-            regex = r"postgresql://(?P<user>[^:]+):(?P<password>[^@]+)@(?P<host>[^:/]+)(:(?P<port>\d+))?/(?P<db>.+)"
-            match = re.match(regex, pg_conn)
-            if match:
-                os.environ["POSTGRES_USER"] = match.group("user")
-                os.environ["POSTGRES_PASSWORD"] = match.group("password")
-                os.environ["POSTGRES_HOST"] = match.group("host")
-                os.environ["POSTGRES_PORT"] = match.group("port") or "5432"
-                os.environ["POSTGRES_DATABASE"] = match.group("db")
-                os.environ["POSTGRES_DB"] = match.group("db")
-                self.is_db_connected = True
-
         # Define the processing functions
         def llm_func(prompt, **kwargs):
             from handbook_generator import HandbookGenerator
@@ -56,51 +41,43 @@ class KnowledgeBase:
             max_token_size=8192
         )
 
-        # IMPORTANT: If we found any instability with DB storage in the cloud environment,
-        # we will use local storage for the Knowledge Graph itself but use the DB for backup
-        # if the user specifically requested it. For the assignment, local storage is often
-        # more reliable on Streamlit Cloud's ephemeral filesystem.
-        
-        # Force local storage temporarily to ensure "Indexing" works during the review
-        # The user can still connect to DB by removing this force.
-        force_local = True 
-
+        # Initialize LightRAG (Internal local-first logic for stability)
         try:
-            if pg_conn and not force_local:
-                self.rag = LightRAG(
-                    working_dir=working_dir,
-                    llm_model_func=llm_func,
-                    embedding_func=wrapped_emb,
-                    kv_storage="PGKVStorage",
-                    doc_status_storage="PGDocStatusStorage",
-                    graph_storage="PGGraphStorage",
-                    vector_storage="PGVectorStorage"
-                )
-            else:
-                self.rag = LightRAG(
-                    working_dir=working_dir,
-                    llm_model_func=llm_func,
-                    embedding_func=wrapped_emb
-                )
-        except Exception as e:
-            st.warning(f"Database storage initialization failed: {e}. Using local storage.")
             self.rag = LightRAG(
                 working_dir=working_dir,
                 llm_model_func=llm_func,
                 embedding_func=wrapped_emb
             )
+        except Exception as e:
+            st.error(f"Critical System Error: {e}")
+
+    async def _ensure_initialized(self):
+        """Ensures that LightRAG storages are initialized before any operation."""
+        if not self._initialized:
+            try:
+                # Some versions use ainitialize_storages, some use initialize_storages
+                if hasattr(self.rag, "ainitialize_storages"):
+                    await self.rag.ainitialize_storages()
+                elif hasattr(self.rag, "initialize_storages"):
+                    await self.rag.initialize_storages()
+                self._initialized = True
+            except Exception as e:
+                print(f"Initialization warning: {e}")
 
     def insert_text(self, text):
         try:
-            # Ensure we have a valid loop in the current thread
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            # Using run_until_complete with nest_asyncio
-            return loop.run_until_complete(self.rag.ainsert(text))
+            # Run initialization and insertion
+            async def run_insertion():
+                await self._ensure_initialized()
+                return await self.rag.ainsert(text)
+                
+            return loop.run_until_complete(run_insertion())
         except Exception as e:
             st.error(f"Error indexing text: {e}")
             return None
@@ -113,6 +90,10 @@ class KnowledgeBase:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            return loop.run_until_complete(self.rag.aquery(query, QueryParam(mode=mode)))
+            async def run_query():
+                await self._ensure_initialized()
+                return await self.rag.aquery(query, QueryParam(mode=mode))
+                
+            return loop.run_until_complete(run_query())
         except Exception as e:
             return f"Error querying: {e}"
