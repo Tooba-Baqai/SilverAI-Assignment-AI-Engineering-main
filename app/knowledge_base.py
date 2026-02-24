@@ -17,7 +17,7 @@ class KnowledgeBase:
         pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
         os.environ["POSTGRES_STATEMENT_CACHE_SIZE"] = "0"
         
-        # Simple functions
+        # Define functions
         def llm_func(prompt, **kwargs):
             from handbook_generator import HandbookGenerator
             return HandbookGenerator()._get_completion(prompt)
@@ -27,13 +27,19 @@ class KnowledgeBase:
             model = SentenceTransformer('all-MiniLM-L6-v2')
             return model.encode(texts)
 
+        # LIGHTRAG EXPECTS A DICT OR AN OBJECT WITH .func
+        # Let's use the dictionary method which is most stable across versions
+        embedding_dict = {
+            "func": emb_func,
+            "dimension": 384
+        }
+
         try:
-            # Try PostgreSQL first
             if pg_conn:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=emb_func,
+                    embedding_func=embedding_dict,
                     kv_storage="PGKVStorage",
                     doc_status_storage="PGDocStatusStorage",
                     graph_storage="PGGraphStorage",
@@ -44,14 +50,14 @@ class KnowledgeBase:
                 self.rag = LightRAG(
                     working_dir=working_dir,
                     llm_model_func=llm_func,
-                    embedding_func=emb_func
+                    embedding_func=embedding_dict
                 )
-        except Exception:
-            # Absolute fallback to local
+        except Exception as e:
+            print(f"ERROR: {e}")
             self.rag = LightRAG(
                 working_dir=working_dir,
                 llm_model_func=llm_func,
-                embedding_func=emb_func
+                embedding_func=embedding_dict
             )
 
     def insert_text(self, text):

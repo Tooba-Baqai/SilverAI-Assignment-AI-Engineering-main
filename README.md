@@ -1,62 +1,63 @@
-# 📚 LunarTech AI: Handbook Generator (AI Engineering Assignment)
+# 📚 LunarTech AI: Handbook Generator & Knowledge Graph RAG
 
-A production-ready AI application that transforms PDF documents into a structured **Knowledge Graph (LightRAG)** and generates **20,000-word handbooks** using the **AgentWrite (LongWriter)** technique.
+This project is a high-performance AI Engineering application built for the **LunarTech AI Engineering Apprenticeship Assignment**. It features a Graph-based RAG system for document chat and an advanced **AgentWrite (LongWriter)** engine capable of generating comprehensive 20,000-word handbooks from PDF context.
 
----
+## 🚀 Key Features
+- **PDF Knowledge Extraction**: Uses `pdfplumber` and `LightRAG` to transform static PDFs into a dynamic Knowledge Graph.
+- **GraphRAG Chat**: Context-aware chat interface that retrieves information from the Graph database to provide high-fidelity answers.
+- **20k-Word Handbook Generator**: Implements the **AgentWrite (LongWriter)** technique (Plan -> Sequential Write) to bypass standard LLM output limits and generate massive, structured documents.
+- **Asynchronous Engine**: A dedicated background threading model ensures the UI remains responsive even during heavy AI processing.
+- **Resilient Generation**: Automatic rate-limit handling and model fallback (70B to 8B) for uninterrupted production-grade performance.
 
-## 🚀 Executive Summary
-This application solves the challenge of generating ultra-long contextually aware documents. By combining **LightRAG** for deep knowledge retrieval and a multi-stage **AgentWrite** execution pipeline, the system can produce cohesive handbooks exceeding 15,000+ words from user-uploaded PDFs.
+## 🛠️ Tech Stack
+- **Frontend**: Streamlit
+- **AI Engine**: LightRAG (Graph-based Retrieval Augmented Generation)
+- **Database**: Supabase (PostgreSQL + pgvector)
+- **LLM Provider**: Groq (Llama 3.3 70B & Llama 3.1 8B)
+- **Embeddings**: Sentence-Transformers (Local fallback) / OpenAI
 
-## 🛠️ Technology Stack
-- **Frontend**: Streamlit (Sleek, responsive chat interface)
-- **AI Engine**: [LightRAG-hku](https://github.com/HKU-ADS/LightRAG) (Advanced GraphRAG)
-- **LLM**: Groq (Llama-3.3-70B-Versatile)
-- **Database**: Supabase (PostgreSQL with `pgvector` for vector storage)
-- **PDF Core**: `pdfplumber` & `pypdf`
-- **Embedding**: `sentence-transformers` (Local fallback for free/offline usage)
-
-## 📖 Features & Functionality
-- **Dynamic PDF Ingestion**: Extract and index complex PDF structures into a Knowledge Graph.
-- **Graph-Based Retrieval**: Contextual chat that understands entity relationships across multiple documents.
-- **20k Handbook Engine**: Implements the **LongWriter** methodology:
-    1. **Planning Phase**: Architecting a 20-30 section detailed outline.
-    2. **Writing Phase (Recursive)**: Sequential generation of 800-1000 word chapters, maintaining state through parent context.
-- **Resilient AI Loop**: Built-in logic to handle API Rate Limits (429) by automatically sleeping and resuming.
-
-## 💻 Setup & Installation
+## 📦 Setup Instructions
 
 ### 1. Prerequisites
 - Python 3.10+
-- [Supabase](https://supabase.com/) project with a DB connection string.
-- [Groq](https://console.groq.com/) API Key.
+- A Supabase project with a PostgreSQL connection string.
+- A Groq API Key.
 
-### 2. Install Dependencies
+### 2. Installation
+Clone the repository and install dependencies:
 ```bash
-pip install -r app/requirements.txt
+pip install -r requirements.txt
+pip install sentence-transformers nest_asyncio lightrag-hku
 ```
 
-### 3. Environment Configuration
-Create an `.env` file in the `app/` directory:
+### 3. Environment Variables
+Create a `.env` file in the `app/` directory:
 ```env
-GROK_API_KEY=your_groq_key
-POSTGRES_CONNECTION_STRING=your_supabase_pooler_url
+GROK_API_KEY=your_groq_api_key
+POSTGRES_CONNECTION_STRING=your_supabase_connection_string
 MODEL_PROVIDER=grok
 MODEL_NAME=llama-3.3-70b-versatile
+# Optional: OPENAI_API_KEY=your_key (If omitted, local embeddings will be used)
 ```
 
-### 4. Run the App
+### 4. Running the Application
 ```bash
 cd app
 python -m streamlit run main.py
 ```
 
-## 🏗️ Technical Approach & Challenges
-### The "Different Event Loop" Challenge
-Streaming heavy AI operations within Streamlit often results in `RuntimeError: bound to a different event loop`. I solved this by implementing a **Singleton Background Thread** architecture. This ensures the AI Engine lives in its own persistent loop, isolated from Streamlit's frequent UI reruns.
+## 📖 Usage Guide
+1. **Upload**: Drag and drop 1 or more PDFs into the sidebar.
+2. **Process**: Click "Process Documents" to build the Knowledge Graph.
+3. **Chat**: Ask questions about your documents in the chat window.
+4. **Generate Handbook**: Type "Generate a 20,000-word handbook about [topic]" to start the LongWriter engine.
 
-### Hitting the 20k Word Target
-Standard LLMs suffer from "output starvation" after ~1000 words. Following the **AgentWrite** research, I implemented a plan-then-write sequence. The system first creates a comprehensive map, then writes each section while feeding the previous section's summary back into the prompt to ensure transition consistency.
+## 🧠 Methodology: AgentWrite (LongWriter)
+This application implements the **LongWriter (AgentWrite)** methodology. Instead of requesting a long document in a single prompt (which leads to "lazy" outputs), the system:
+1. **Retrieves Context**: Pulls relevant entity relationships from the Knowledge Graph.
+2. **Plans**: Uses the LLM to architect a 20-section detailed outline.
+3. **Writes**: Executes 20 sequential recursive prompts, maintaining state and context across sections to produce a cohesive 15,000 - 20,000 word document.
 
 ---
-**Developed for the LunarTech AI Engineering Apprenticeship.**
-*GitHub Access granted to: vahekaren@gmail.com*
+**Confidential — LunarTech AI Engineering Assignment**
+*Developed by Tooba Baqai*
