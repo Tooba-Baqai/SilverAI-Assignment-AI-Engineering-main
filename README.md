@@ -2,7 +2,7 @@
 
 A powerful AI-driven suite that generates professional, 20,000+ word handbooks and structured documentation from your PDF sources using GraphRAG and LongWriter techniques.
 
-**🔗 [Live Demo: AI Handbook Architect](https://silverai-assignment-ai-engineering-main.streamlit.app/)**
+**🔗 [Live Demo: AI Handbook Architect](https://silverai-assignment-ai-engineering-main-gzkrkhnguprsja7nqwe432.streamlit.app/)**
 
 ## ✨ Key Features
 
