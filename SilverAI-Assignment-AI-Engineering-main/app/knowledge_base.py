@@ -19,33 +19,44 @@ class KnowledgeBase:
         # Force cache size to 0 for Supabase Pooler compatibility
         os.environ["POSTGRES_STATEMENT_CACHE_SIZE"] = "0"
         
-        # Initialize LightRAG with the correct storage settings
+        # Define the core functions to reuse
+        llm_func = self._llm_complete
+        emb_func = self._embedding_func
+
+        # Initialize LightRAG
         try:
+            if pg_conn:
+                self.rag = LightRAG(
+                    working_dir=working_dir,
+                    llm_model_func=llm_func,
+                    embedding_func=emb_func,
+                    kv_storage="PGKVStorage",
+                    doc_status_storage="PGDocStatusStorage",
+                    graph_storage="PGGraphStorage",
+                    vector_storage="PGVectorStorage",
+                    addon_conf={"postgres_conn_config": pg_conn}
+                )
+                print("DEBUG: Knowledge Base initialized with PostgreSQL.")
+            else:
+                raise ValueError("No database connection string found.")
+        except Exception as e:
+            print(f"WARNING: Database connection failed, falling back to local: {e}")
+            # IMPORTANT: Re-pass the functions to the local fallback!
             self.rag = LightRAG(
                 working_dir=working_dir,
-                llm_model_func=self._llm_complete,
-                embedding_func=self._embedding_func,
-                kv_storage="PGKVStorage",
-                doc_status_storage="PGDocStatusStorage",
-                graph_storage="PGGraphStorage",
-                vector_storage="PGVectorStorage",
-                addon_conf={"postgres_conn_config": pg_conn}
+                llm_model_func=llm_func,
+                embedding_func=emb_func
             )
-            print("DEBUG: Knowledge Base initialized successfully.")
-        except Exception as e:
-            print(f"ERROR: Initializing Knowledge Base: {e}")
-            # Fallback to local storage if DB fails
-            self.rag = LightRAG(working_dir=working_dir)
 
     def _llm_complete(self, prompt, **kwargs):
-        # Local import to avoid circular dependencies
         from handbook_generator import HandbookGenerator
+        # Note: We don't pass arguments here to let it use st.secrets inside __init__
         gen = HandbookGenerator()
         return gen._get_completion(prompt)
 
     async def _embedding_func(self, texts):
-        # Using a fast local embedding model to save API tokens
         from sentence_transformers import SentenceTransformer
+        # Download usually takes ~30s on first run in cloud
         model = SentenceTransformer('all-MiniLM-L6-v2')
         embeddings = model.encode(texts)
         return embeddings
