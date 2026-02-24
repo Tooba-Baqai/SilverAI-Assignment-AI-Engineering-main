@@ -136,3 +136,9 @@ class HandbookGenerator:
         results = await asyncio.gather(*tasks)
         
         return "\n\n".join(results)
+
+def get_generator():
+    """Singleton getter for HandbookGenerator."""
+    if "generator_instance" not in st.session_state:
+        st.session_state.generator_instance = HandbookGenerator()
+    return st.session_state.generator_instance

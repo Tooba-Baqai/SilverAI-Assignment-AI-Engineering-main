@@ -18,8 +18,6 @@ class KnowledgeBase:
         if not os.path.exists(working_dir):
             os.makedirs(working_dir)
         
-        # Database connection from Secrets
-        pg_conn = st.secrets.get("POSTGRES_CONNECTION_STRING") or os.getenv("POSTGRES_CONNECTION_STRING")
         self._initialized = False
         
         # Use session state to cache the heavy model so it's only loaded ONCE
@@ -47,7 +45,7 @@ class KnowledgeBase:
             max_token_size=8192
         )
 
-        # Initialize LightRAG (Internal local-first logic for stability)
+        # Initialize LightRAG
         try:
             self.rag = LightRAG(
                 working_dir=working_dir,
@@ -70,6 +68,15 @@ class KnowledgeBase:
             except Exception as e:
                 print(f"Initialization warning: {e}")
 
+    def _get_loop(self):
+        """Helper to safely get or create an event loop."""
+        try:
+            return asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
+
     async def ainsert_text(self, text):
         """Async version of text insertion."""
         await self._ensure_initialized()
@@ -78,14 +85,10 @@ class KnowledgeBase:
     def insert_text(self, text):
         """Sync wrapper for text insertion."""
         try:
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
+            loop = self._get_loop()
             return loop.run_until_complete(self.ainsert_text(text))
         except Exception as e:
+            # If still failing, try to fix the lock issue by re-initializing the internal lock if possible
             st.error(f"Error indexing text: {e}")
             return None
 
@@ -97,12 +100,13 @@ class KnowledgeBase:
     def query(self, query, mode="hybrid"):
         """Sync wrapper for querying."""
         try:
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
+            loop = self._get_loop()
             return loop.run_until_complete(self.aquery(query, mode=mode))
         except Exception as e:
             return f"Error querying: {e}"
+
+def get_kb():
+    """Singleton getter for KnowledgeBase to prevent event loop issues."""
+    if "kb" not in st.session_state:
+        st.session_state.kb = KnowledgeBase()
+    return st.session_state.kb

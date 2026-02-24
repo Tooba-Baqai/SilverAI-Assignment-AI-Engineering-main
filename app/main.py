@@ -43,11 +43,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State
-if "kb" not in st.session_state:
-    st.session_state.kb = KnowledgeBase()
-if "generator" not in st.session_state:
-    st.session_state.generator = HandbookGenerator()
+from knowledge_base import get_kb
+from handbook_generator import get_generator
+
+# Initialize Session State using safe getters
+st.session_state.kb = get_kb()
+st.session_state.generator = get_generator()
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "indexed" not in st.session_state:
