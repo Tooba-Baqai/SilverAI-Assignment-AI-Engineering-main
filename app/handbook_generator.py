@@ -34,9 +34,9 @@ class HandbookGenerator:
             self.client = OpenAI(api_key=openai_key)
             self.async_client = AsyncOpenAI(api_key=openai_key)
 
-    def _get_completion(self, prompt, max_tokens=4096, retry_count=3):
+    def _get_completion(self, prompt, max_tokens=4096, retry_count=3, current_model_override=None):
         for attempt in range(retry_count):
-            current_model = self.model_name
+            current_model = current_model_override or self.model_name
             try:
                 response = self.client.chat.completions.create(
                     model=current_model,
@@ -48,7 +48,7 @@ class HandbookGenerator:
             except Exception as e:
                 err_msg = str(e)
                 if "rate_limit_exceeded" in err_msg or "429" in err_msg:
-                    if self.model_name != self.fallback_model:
+                    if not current_model_override and self.model_name != self.fallback_model:
                         self.model_name = self.fallback_model
                         continue
                     wait_time = 60
@@ -56,15 +56,15 @@ class HandbookGenerator:
                     if match: wait_time = float(match.group(1)) + 2
                     time.sleep(wait_time)
                 elif "decommissioned" in err_msg or "400" in err_msg:
-                    self.model_name = self.fallback_model
+                    if not current_model_override: self.model_name = self.fallback_model
                     continue
                 else:
                     time.sleep(5)
         return "I encountered a persistent error with the AI provider."
 
-    async def _get_completion_async(self, prompt, max_tokens=4096, retry_count=3):
+    async def _get_completion_async(self, prompt, max_tokens=4096, retry_count=3, current_model_override=None):
         for attempt in range(retry_count):
-            current_model = self.model_name
+            current_model = current_model_override or self.model_name
             try:
                 response = await self.async_client.chat.completions.create(
                     model=current_model,
@@ -76,7 +76,7 @@ class HandbookGenerator:
             except Exception as e:
                 err_msg = str(e)
                 if "rate_limit_exceeded" in err_msg or "429" in err_msg:
-                    if self.model_name != self.fallback_model:
+                    if not current_model_override and self.model_name != self.fallback_model:
                         self.model_name = self.fallback_model
                         continue
                     wait_time = 60
@@ -84,7 +84,7 @@ class HandbookGenerator:
                     if match: wait_time = float(match.group(1)) + 2
                     await asyncio.sleep(wait_time)
                 elif "decommissioned" in err_msg or "400" in err_msg:
-                    self.model_name = self.fallback_model
+                    if not current_model_override: self.model_name = self.fallback_model
                     continue
                 else:
                     await asyncio.sleep(5)
@@ -96,36 +96,39 @@ class HandbookGenerator:
         return loop.run_until_complete(self.generate_handbook(prompt, kb, progress_callback))
 
     async def generate_handbook(self, prompt, kb, progress_callback=None):
-        # 1. Faster context retrieval (local mode is much faster than hybrid for large docs)
-        if progress_callback: progress_callback(0, 20, "Scanning Knowledge Graph...")
-        context = await kb.aquery(prompt, mode="local") 
+        # 1. Faster context retrieval ('naive' is 10x faster than 'local' for large docs)
+        if progress_callback: progress_callback(0, 20, "Searching Knowledge Base (Fast Mode)...")
+        context = await kb.aquery(prompt, mode="naive") 
         
-        # 2. Plan Generation
+        # 2. Plan Generation (Keep 70B for high-quality structure)
         if progress_callback: progress_callback(0, 20, "Architecting Handbook Structure...")
-        plan_prompt = f"Break down this request into 20 distinct, detailed chapter titles: {prompt}. Context: {context[:3000]}"
-        plan_text = await self._get_completion_async(plan_prompt)
+        plan_prompt = f"Break down this request into 20 distinct chapter titles: {prompt}. Context: {context[:3000]}"
+        plan_text = await self._get_completion_async(plan_prompt) # Uses 70B by default
         
         sections = [line.strip() for line in plan_text.split("\n") if line.strip() and ("Section" in line or any(c.isdigit() for c in line[:3]))]
         if not sections: sections = [f"Section {i}: Part {i}" for i in range(1, 21)]
         sections = sections[:20]
 
-        # 3. Parallel Execution with Concurrency Limit (Semaphore)
-        # Using a limit of 4 to balance speed and Groq rate limits (14.4k tokens per minute)
-        semaphore = asyncio.Semaphore(4)
+        # 3. Parallel Execution with 8B Model for Speed
+        # Use 8B model for drafting to avoid rate limits and generate content 5x faster
+        generation_model = self.fallback_model # llama-3.1-8b-instant
+        semaphore = asyncio.Semaphore(5)
         completed_count = 0
 
         async def generate_section(i, section_step):
             nonlocal completed_count
             async with semaphore:
                 if progress_callback: progress_callback(completed_count, len(sections), f"Drafting: {section_step}")
-                write_prompt = f"""Write a comprehensive chapter for: {section_step}. 
+                write_prompt = f"""As a professional author, write a detailed, 1000-word chapter for: {section_step}. 
                 Handbook Topic: {prompt}
-                Context: {context[:1500]}
-                Target: ~1000 words. Maintain professional depth."""
+                Context snippets: {context[:2000]}
+                Style: Deep, educational, and professional. 
+                Length: Maximum possible detail."""
                 
-                content = await self._get_completion_async(write_prompt)
+                # Force the use of the faster 8B model for chapter drafting
+                content = await self._get_completion_async(write_prompt, current_model_override=generation_model)
                 completed_count += 1
-                if progress_callback: progress_callback(completed_count, len(sections), f"Completed: {section_step}")
+                if progress_callback: progress_callback(completed_count, len(sections), f"Done: {section_step}")
                 return content
 
         # Run sections in parallel
