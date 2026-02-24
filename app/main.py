@@ -62,12 +62,20 @@ with st.sidebar:
     
     if st.button("Index Documents"):
         if uploaded_files:
-            with st.spinner("Analyzing Content & Building Knowledge Graph... (This creates a deep AI memory, please wait 1-2 minutes)"):
+                total_chars = 0
                 for uploaded_file in uploaded_files:
                     text = extract_text_from_pdf(uploaded_file)
+                    if not text or len(text.strip()) < 10:
+                        st.error(f"Could not read text from {uploaded_file.name}. Is it scanned or empty?")
+                        continue
                     st.session_state.kb.insert_text(text)
-                st.session_state.indexed = True
-                st.success("Indexing Complete! Knowledge Graph is now active.")
+                    total_chars += len(text)
+                
+                if total_chars > 0:
+                    st.session_state.indexed = True
+                    st.success(f"Indexing Complete! Successfully processed {total_chars:,} characters. Knowledge Graph is now active.")
+                else:
+                    st.error("Indexing failed: No readable content was found in the uploaded documents.")
         else:
             st.warning("Please upload at least one PDF.")
     

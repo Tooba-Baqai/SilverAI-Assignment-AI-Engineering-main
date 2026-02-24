@@ -77,12 +77,15 @@ class KnowledgeBase:
         return st.session_state.rag_instance
 
     def insert_text(self, text):
-        """Sync wrapper with loop safety."""
-        if not text: return False
-        
+        """Sync wrapper with loop safety and character count logging."""
+        if not text or len(text.strip()) < 10: 
+            print("Indexing warning: Provided text is too short or empty.")
+            return False
+            
         async def _internal():
             rag = await self._ensure_rag()
             await rag.ainsert(text)
+            print(f"Successfully indexed {len(text)} characters into Knowledge Graph.")
             return True
 
         try:
@@ -94,22 +97,33 @@ class KnowledgeBase:
             return False
 
     def query(self, query, mode="hybrid"):
-        """Adaptive Query with Fallback Search."""
+        """Adaptive Query with Fallback Search and failure detection."""
         
         async def _internal():
             rag = await self._ensure_rag()
             
-            # Try primary search mode (hybrid is best for 20k word manuals)
+            def is_failure(text):
+                if not text: return True
+                text_lower = str(text).lower()
+                # LightRAG often returns these phrases when no context is found
+                failures = ["sorry", "i'm not able", "no-context", "don't have enough information", "i couldn't find"]
+                if len(text_lower.strip()) < 20: return True
+                return any(f in text_lower for f in failures)
+
+            # Try primary search mode
             res = await rag.aquery(query, QueryParam(mode=mode))
             
-            # Fallback logic: If empty, walk down the modes
-            if not res or len(str(res).strip()) < 10:
+            # Fallback logic: If failure detected, try other modes
+            if is_failure(res):
                 res = await rag.aquery(query, QueryParam(mode="local"))
             
-            if not res or len(str(res).strip()) < 10:
+            if is_failure(res):
                 res = await rag.aquery(query, QueryParam(mode="naive"))
                 
-            return res if res else "I checked the document but couldn't find specifics for that question."
+            if is_failure(res):
+                return "I've scanned the documents but couldn't find a direct answer. Please ensure the documents were indexed correctly or try re-phrasing your question."
+                
+            return res
 
         try:
             loop = asyncio.new_event_loop()
